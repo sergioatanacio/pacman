@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pac-Man Mejorado</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+            display: block;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="420" height="465"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const CELL_SIZE = 20;
+        const PACMAN_SIZE = 15;
+        const GHOST_SIZE = 15;
+        const DOT_SIZE = 4;
+
+        let pacman = { x: 1, y: 1, direction: 0, nextDirection: 0, moveCounter: 0 };
+        let ghosts = [
+            { x: 9, y: 9, direction: 0, moveCounter: 0 },
+            { x: 10, y: 9, direction: 0, moveCounter: 0 },
+            { x: 11, y: 9, direction: 0, moveCounter: 0 }
+        ];
+
+        let score = 0;
+
+        const maze = [
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
+            [1,0,1,1,0,1,1,1,1,0,1,0,1,1,1,1,0,1,1,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,1,1,0,1,0,1,1,1,1,1,1,1,0,1,0,1,1,0,1],
+            [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],
+            [1,1,1,1,0,1,1,1,1,0,1,0,1,1,1,1,0,1,1,1,1],
+            [1,1,1,1,0,1,0,0,0,0,0,0,0,0,0,1,0,1,1,1,1],
+            [1,1,1,1,0,1,0,1,1,1,0,1,1,1,0,1,0,1,1,1,1],
+            [0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0],
+            [1,1,1,1,0,1,0,1,1,1,1,1,1,1,0,1,0,1,1,1,1],
+            [1,1,1,1,0,1,0,0,0,0,0,0,0,0,0,1,0,1,1,1,1],
+            [1,1,1,1,0,1,0,1,1,1,1,1,1,1,0,1,0,1,1,1,1],
+            [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1],
+            [1,0,1,1,0,1,1,1,1,0,1,0,1,1,1,1,0,1,1,0,1],
+            [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1],
+            [1,1,0,1,0,1,0,1,1,1,1,1,1,1,0,1,0,1,0,1,1],
+            [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],
+            [1,0,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,1,1,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ];
+
+        function drawMaze() {
+            for (let y = 0; y < maze.length; y++) {
+                for (let x = 0; x < maze[y].length; x++) {
+                    if (maze[y][x] === 1) {
+                        ctx.fillStyle = 'blue';
+                        ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                    } else if (maze[y][x] === 0) {
+                        ctx.fillStyle = 'white';
+                        ctx.beginPath();
+                        ctx.arc(x * CELL_SIZE + CELL_SIZE / 2, y * CELL_SIZE + CELL_SIZE / 2, DOT_SIZE, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+        }
+
+        function drawPacman() {
+            ctx.fillStyle = 'yellow';
+            ctx.beginPath();
+            let mouthAngle = 0.2 * Math.PI * Math.sin(pacman.moveCounter * 0.5);
+            ctx.arc(pacman.x * CELL_SIZE + CELL_SIZE / 2, pacman.y * CELL_SIZE + CELL_SIZE / 2, PACMAN_SIZE, mouthAngle, 2 * Math.PI - mouthAngle);
+            ctx.lineTo(pacman.x * CELL_SIZE + CELL_SIZE / 2, pacman.y * CELL_SIZE + CELL_SIZE / 2);
+            ctx.fill();
+        }
+
+        function drawGhosts() {
+            ghosts.forEach((ghost, index) => {
+                ctx.fillStyle = ['red', 'pink', 'cyan', 'orange'][index % 4];
+                ctx.beginPath();
+                ctx.arc(ghost.x * CELL_SIZE + CELL_SIZE / 2, ghost.y * CELL_SIZE + CELL_SIZE / 2, GHOST_SIZE, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function drawScore() {
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            ctx.fillText(`Score: ${score}`, 10, 455);
+        }
+
+        function update() {
+            movePacman();
+            moveGhosts();
+
+            // Check for collisions with ghosts
+            if (ghosts.some(ghost => Math.abs(ghost.x - pacman.x) < 0.5 && Math.abs(ghost.y - pacman.y) < 0.5)) {
+                alert('Game Over! Your score: ' + score);
+                resetGame();
+            }
+
+            // Check if all dots are eaten
+            if (maze.every(row => row.every(cell => cell !== 0))) {
+                alert('You Win! Your score: ' + score);
+                resetGame();
+            }
+        }
+
+        function movePacman() {
+            pacman.moveCounter++;
+            if (pacman.moveCounter < 5) return; // Slow down Pacman's movement
+
+            pacman.moveCounter = 0;
+            let newX = pacman.x;
+            let newY = pacman.y;
+
+            if (pacman.nextDirection === 0) newX += 1;
+            if (pacman.nextDirection === 1) newY -= 1;
+            if (pacman.nextDirection === 2) newX -= 1;
+            if (pacman.nextDirection === 3) newY += 1;
+
+            if (newX >= 0 && newX < maze[0].length && newY >= 0 && newY < maze.length && maze[newY][newX] !== 1) {
+                pacman.x = newX;
+                pacman.y = newY;
+                pacman.direction = pacman.nextDirection;
+
+                if (maze[newY][newX] === 0) {
+                    maze[newY][newX] = 2;  // Mark as eaten
+                    score += 10;
+                }
+            } else {
+                // If can't move in the next direction, try the current direction
+                newX = pacman.x;
+                newY = pacman.y;
+                if (pacman.direction === 0) newX += 1;
+                if (pacman.direction === 1) newY -= 1;
+                if (pacman.direction === 2) newX -= 1;
+                if (pacman.direction === 3) newY += 1;
+
+                if (newX >= 0 && newX < maze[0].length && newY >= 0 && newY < maze.length && maze[newY][newX] !== 1) {
+                    pacman.x = newX;
+                    pacman.y = newY;
+
+                    if (maze[newY][newX] === 0) {
+                        maze[newY][newX] = 2;  // Mark as eaten
+                        score += 10;
+                    }
+                }
+            }
+        }
+
+        function moveGhosts() {
+            ghosts.forEach(ghost => {
+                ghost.moveCounter++;
+                if (ghost.moveCounter < 7) return; // Slow down ghosts' movement
+
+                ghost.moveCounter = 0;
+                const directions = [
+                    { dx: 1, dy: 0 },
+                    { dx: 0, dy: -1 },
+                    { dx: -1, dy: 0 },
+                    { dx: 0, dy: 1 }
+                ];
+
+                // Calculate distances to Pacman for each valid move
+                let validMoves = directions.map(dir => {
+                    let newX = ghost.x + dir.dx;
+                    let newY = ghost.y + dir.dy;
+                    if (newX >= 0 && newX < maze[0].length && newY >= 0 && newY < maze.length && maze[newY][newX] !== 1) {
+                        let distance = Math.abs(newX - pacman.x) + Math.abs(newY - pacman.y);
+                        return { dx: dir.dx, dy: dir.dy, distance: distance };
+                    }
+                    return null;
+                }).filter(move => move !== null);
+
+                if (validMoves.length > 0) {
+                    // 70% chance to move towards Pacman, 30% chance for random movement
+                    if (Math.random() < 0.7) {
+                        validMoves.sort((a, b) => a.distance - b.distance);
+                        ghost.x += validMoves[0].dx;
+                        ghost.y += validMoves[0].dy;
+                    } else {
+                        let randomMove = validMoves[Math.floor(Math.random() * validMoves.length)];
+                        ghost.x += randomMove.dx;
+                        ghost.y += randomMove.dy;
+                    }
+                }
+            });
+        }
+
+        function resetGame() {
+            pacman = { x: 1, y: 1, direction: 0, nextDirection: 0, moveCounter: 0 };
+            ghosts = [
+                { x: 9, y: 9, direction: 0, moveCounter: 0 },
+                { x: 10, y: 9, direction: 0, moveCounter: 0 },
+                { x: 11, y: 9, direction: 0, moveCounter: 0 }
+            ];
+            score = 0;
+            maze.forEach((row, y) => {
+                row.forEach((cell, x) => {
+                    if (cell === 2) maze[y][x] = 0;
+                });
+            });
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawMaze();
+            drawPacman();
+            drawGhosts();
+            drawScore();
+            update();
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'ArrowRight') pacman.nextDirection = 0;
+            if (event.key === 'ArrowUp') pacman.nextDirection = 1;
+            if (event.key === 'ArrowLeft') pacman.nextDirection = 2;
+            if (event.key === 'ArrowDown') pacman.nextDirection = 3;
+        });
+
+        gameLoop();
+    </script>
+</body>
+</html>
